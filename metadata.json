@@ -1,0 +1,6 @@
+{
+  "name": "Cometa PTT",
+  "description": "Radio Walkie-Talkie PTT estilo Nextel con comunicación de voz y mensajes de texto encriptados AES-256 GCM y camuflaje Anti-DPI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
