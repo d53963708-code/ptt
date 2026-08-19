@@ -31,12 +31,15 @@ jobs:
 
       - name: Install Android SDK command-line tools
         run: |
+          export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+
           sudo apt-get update
           sudo apt-get install -y wget unzip
+
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
           unzip -o cmdline.zip -d "$ANDROID_SDK_ROOT/cmdline-tools"
-          # mover a "latest" si la estructura del zip es cmdline-tools/cmdline-tools
+
           if [ -d "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" ]; then
             rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
             mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
@@ -45,7 +48,7 @@ jobs:
             mv "$ANDROID_SDK_ROOT/cmdline-tools"/* "$ANDROID_SDK_ROOT/cmdline-tools/latest" 2>/dev/null || true
           fi
 
-          # Construir classpath con todos los jars (incluyendo lib/sdklib)
+          # Build classpath for sdkmanager
           CLASSPATH=""
           for f in "$ANDROID_SDK_ROOT/cmdline-tools/latest/lib/"*.jar; do
             CLASSPATH="$CLASSPATH:$f"
@@ -55,13 +58,13 @@ jobs:
           done
           CLASSPATH="${CLASSPATH#:}"
 
-          # Instalar paquetes SDK usando la clase Java directamente (evita errores del wrapper sdkmanager)
-          java -cp "$CLASSPATH" com.android.sdklib.tool.sdkmanager.SdkManagerCli --sdk_root=${ANDROID_SDK_ROOT} "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          # Install SDK packages using the Java class directly (more reliable in CI)
+          java -cp "$CLASSPATH" com.android.sdklib.tool.sdkmanager.SdkManagerCli --sdk_root=${ANDROID_SDK_ROOT} "platform-tools" "platforms;android-36" "build-tools;36.0.0" || true
+        shell: bash
 
       - name: Accept Android licenses
         run: |
+          export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
           CLASSPATH=""
           for f in "$ANDROID_SDK_ROOT/cmdline-tools/latest/lib/"*.jar; do
             CLASSPATH="$CLASSPATH:$f"
@@ -70,21 +73,43 @@ jobs:
             CLASSPATH="$CLASSPATH:$f"
           done
           CLASSPATH="${CLASSPATH#:}"
-          yes | java -cp "$CLASSPATH" com.android.sdklib.tool.sdkmanager.SdkManagerCli --sdk_root=${ANDROID_SDK_ROOT} --licenses
-        env:
-          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          yes | java -cp "$CLASSPATH" com.android.sdklib.tool.sdkmanager.SdkManagerCli --sdk_root=${ANDROID_SDK_ROOT} --licenses || true
+        shell: bash
 
-      - name: Build debug APK
+      - name: Ensure Gradle available (use wrapper if present, otherwise download Gradle 8.11.1)
         run: |
           if [ -f ./gradlew ]; then
+            echo "Using Gradle wrapper"
             chmod +x ./gradlew
-            ./gradlew :app:assembleDebug --no-daemon
+            export GRADLE_BIN="./gradlew"
           else
-            echo "gradlew not found, installing gradle via apt"
-            sudo apt-get update
-            sudo apt-get install -y gradle
-            gradle :app:assembleDebug --no-daemon
+            echo "Gradle wrapper not found — downloading Gradle 8.11.1"
+            GRADLE_VER=8.11.1
+            wget https://services.gradle.org/distributions/gradle-${GRADLE_VER}-bin.zip -O gradle.zip
+            unzip -q gradle.zip -d $HOME
+            GRADLE_HOME="$HOME/gradle-${GRADLE_VER}"
+            export PATH="$GRADLE_HOME/bin:$PATH"
+            export GRADLE_BIN="$GRADLE_HOME/bin/gradle"
           fi
+          echo "Gradle binary: $GRADLE_BIN"
+        shell: bash
+
+      - name: Build debug APK
+        env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+        run: |
+          export ANDROID_SDK_ROOT="$HOME/Android/Sdk"
+          export PATH="$ANDROID_SDK_ROOT/platform-tools:$PATH"
+
+          # Use GRADLE wrapper if present else the downloaded gradle
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew :app:assembleDebug --no-daemon --stacktrace
+          else
+            echo "Using downloaded gradle"
+            $GRADLE_HOME/bin/gradle --no-daemon :app:assembleDebug --stacktrace
+          fi
+        shell: bash
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
