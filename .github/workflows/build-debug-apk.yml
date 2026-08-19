@@ -57,12 +57,17 @@ jobs:
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
       - name: Build debug APK
         run: |
-          ./gradlew :app:assembleDebug --no-daemon
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew :app:assembleDebug --no-daemon
+          else
+            echo "gradlew not found, installing gradle via apt"
+            sudo apt-get update
+            sudo apt-get install -y gradle
+            gradle :app:assembleDebug --no-daemon
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
