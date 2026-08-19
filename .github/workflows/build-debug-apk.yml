@@ -41,19 +41,36 @@ jobs:
             rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
             mv "$ANDROID_SDK_ROOT/cmdline-tools/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           else
-            # intentar crear latest si hay otros ficheros
             mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools/latest" || true
             mv "$ANDROID_SDK_ROOT/cmdline-tools"/* "$ANDROID_SDK_ROOT/cmdline-tools/latest" 2>/dev/null || true
           fi
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          yes | sdkmanager --sdk_root=${ANDROID_SDK_ROOT} "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+          # Construir classpath con todos los jars (incluyendo lib/sdklib)
+          CLASSPATH=""
+          for f in "$ANDROID_SDK_ROOT/cmdline-tools/latest/lib/"*.jar; do
+            CLASSPATH="$CLASSPATH:$f"
+          done
+          for f in "$ANDROID_SDK_ROOT/cmdline-tools/latest/lib/sdklib/"*.jar; do
+            CLASSPATH="$CLASSPATH:$f"
+          done
+          CLASSPATH="${CLASSPATH#:}"
+
+          # Instalar paquetes SDK usando la clase Java directamente (evita errores del wrapper sdkmanager)
+          java -cp "$CLASSPATH" com.android.sdklib.tool.sdkmanager.SdkManagerCli --sdk_root=${ANDROID_SDK_ROOT} "platform-tools" "platforms;android-36" "build-tools;36.0.0"
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
 
       - name: Accept Android licenses
         run: |
-          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-          yes | sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --licenses
+          CLASSPATH=""
+          for f in "$ANDROID_SDK_ROOT/cmdline-tools/latest/lib/"*.jar; do
+            CLASSPATH="$CLASSPATH:$f"
+          done
+          for f in "$ANDROID_SDK_ROOT/cmdline-tools/latest/lib/sdklib/"*.jar; do
+            CLASSPATH="$CLASSPATH:$f"
+          done
+          CLASSPATH="${CLASSPATH#:}"
+          yes | java -cp "$CLASSPATH" com.android.sdklib.tool.sdkmanager.SdkManagerCli --sdk_root=${ANDROID_SDK_ROOT} --licenses
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
 
